@@ -23,9 +23,9 @@ void printAudioDetail(uint8_t type, int value);
 #include <WebSocketsClient.h>
 
 // Wifi:
-WiFiManager wifi_manager;
+//WiFiManager wifi_manager;
 // select which pin will trigger the configuration portal when set to LOW
-#define TRIGGER_PIN D8
+#define TRIGGER_PIN D2
 int timeout = 120; // seconds to run for
 
 // Websocket:
@@ -73,6 +73,7 @@ void saveConfigFile() {
     Serial.println(F("Failed to write config to file"));
   }
 
+  Serial.println(F("Saved config file."));
   configFile.close();
 }
 
@@ -95,7 +96,7 @@ bool loadConfigFile() {
         serializeJsonPretty(config, Serial);
 
         if (!error) {
-          Serial.println("Parsing config file");
+          Serial.println("Parsed config file");
 
           strcpy(server_ip, config["server_ip"]);
           server_port = config["server_port"].as<uint16_t>();
@@ -152,7 +153,7 @@ void initAudio() {
   Serial.println(F("DFPlayer Mini online."));
 
   myDFPlayer.volume(30);  //Set volume value. From 0 to 30
-  myDFPlayer.play(1);  //Play the first mp3
+  //myDFPlayer.play(1);  //Play the first mp3
 }
 
 void printAudioDetail(uint8_t type, int value){
@@ -244,6 +245,10 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
       Serial.printf("LED: %u\n", led);
       Serial.printf("Noise: %u\n", noise);
       Serial.printf("Reboot: %u\n", reboot);
+
+      if (noise == true) {
+        myDFPlayer.play(1);
+      }
     
       if (reboot == true) {
         digitalWrite(LED_BUILTIN, HIGH);
@@ -312,6 +317,7 @@ void setup() {
 
   if (digitalRead(TRIGGER_PIN) == LOW) {
     forceConfig = true;
+    Serial.println("Trigger pin for portal active.");
   }
 
   bool spiffsSetup = loadConfigFile();
@@ -322,6 +328,7 @@ void setup() {
 
   WiFi.mode(WIFI_STA);
 
+  WiFiManager wifi_manager;
   wifi_manager.setSaveConfigCallback(saveConfigCallback);
   wifi_manager.setAPCallback(configModeCallback);
 
@@ -349,7 +356,7 @@ void setup() {
     }
   } else {
     if (!wifi_manager.autoConnect("AlertNet", "123456789")) {
-            Serial.println("Failed to connect and hit timeout");
+      Serial.println("Failed to connect and hit timeout");
       delay(3000);
       ESP.restart();
       delay(5000);
