@@ -25,7 +25,7 @@ void printAudioDetail(uint8_t type, int value);
 // Wifi:
 WiFiManager wifi_manager;
 // select which pin will trigger the configuration portal when set to LOW
-#define TRIGGER_PIN D1
+#define TRIGGER_PIN D8
 int timeout = 120; // seconds to run for
 
 // Websocket:
