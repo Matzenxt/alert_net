@@ -1,3 +1,6 @@
+mod message;
+mod common;
+
 use std::{
     env, error::Error, net::SocketAddr, sync::{Arc, Mutex}
 };
@@ -10,6 +13,7 @@ use sqlx::Connection;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tungstenite::{handshake::server::{ErrorResponse, Request, Response}, http::Uri};
+use crate::message::send::alert::Alert;
 
 #[derive(Clone)]
 struct Client {
@@ -22,12 +26,6 @@ struct Client {
 struct ClientOut {
     socket_addr: String,
     uri: String,
-}
-
-#[derive(Deserialize, Serialize, Clone, Copy)]
-struct Alert{
-    led: bool,
-    noise: bool,
 }
 
 type Tx = UnboundedSender<Message>;
