@@ -85,7 +85,7 @@ void saveConfigFile() {
 }
 
 bool loadConfigFile() {
-  SPIFFS.format();
+  //SPIFFS.format();
 
   Serial.println("Mounting file system.");
 
@@ -242,6 +242,14 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 
 			// send message to server when Connected
 			webSocket.sendTXT("Connected");
+
+      // Check if divce is registered by server.
+      if (device_uuid.length == 0) {
+        Serial.println("Device is not registered by server.");
+        Serial.println("Getting new uuid from server:");
+
+        webSocket.sendTXT("Register");
+      }
 			break;
 		case WStype_TEXT:
 			Serial.printf("[WSc] get text: %s\n", payload);
