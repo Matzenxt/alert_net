@@ -49,10 +49,15 @@ int pirState = LOW;
 #define JSON_CONFIG_FILE "/config.json"
 bool shouldSaveConfig = true;
 
+// Server:
 char server_ip[40] = "192.168.0.88";
 uint16_t server_port = 3000;
-char area[50] = "test";
-char description[50] = "Gerät 1";
+
+// Device:
+uint16_t device_id = 0;
+char device_uuid[50] = "0";
+char device_area[50] = "test";
+char device_description[50] = "Gerät 1";
 
 void saveConfigFile() {
   Serial.println(F("Saving configuration..."));
@@ -60,8 +65,10 @@ void saveConfigFile() {
   JsonDocument config;
   config["server_ip"] = server_ip;
   config["server_port"] = server_port;
-  config["area"] = area;
-  config["description"] = description;
+  config["device"]["id"] = device_id;
+  config["device"]["uuid"] = device_uuid;
+  config["device"]["area"] = device_area;
+  config["device"]["description"] = device_description;
 
   File configFile = SPIFFS.open(JSON_CONFIG_FILE, "w");
   if (!configFile) {
@@ -78,7 +85,7 @@ void saveConfigFile() {
 }
 
 bool loadConfigFile() {
-  //SPIFFS.format();
+  SPIFFS.format();
 
   Serial.println("Mounting file system.");
 
@@ -100,13 +107,17 @@ bool loadConfigFile() {
 
           strcpy(server_ip, config["server_ip"]);
           server_port = config["server_port"].as<uint16_t>();
-          strcpy(area, config["area"]);
-          strcpy(description, config["description"]);
+          device_id = config["device"]["id"].as<uint16_t>();
+          strcpy(device_uuid, config["device"]["uuid"]);
+          strcpy(device_area, config["device"]["area"]);
+          strcpy(device_description, config["device"]["description"]);
 
           return true;
         } else {
           Serial.println("Failed to parse config file");
         }
+
+        configFile.close();
       }
     }
   } else {
@@ -296,6 +307,18 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
     }
 }
 
+void sendDetectionMessage() {
+  JsonDocument doc;
+
+  doc["id"] = 0;
+  doc["device"]["id"] = device_id;
+  doc["device"]["uuid"] = device_uuid;
+  doc["device"]["name"] = device_description;
+  doc["device"]["area"] = device_area;
+  doc["source"] = "Motion";
+  doc["timestamp"] = "2023-09-18T13:40:52.548045700+00:00"; // Placeholder timestamp so message is not rejected from server.
+}
+
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(TRIGGER_PIN, INPUT_PULLUP);
@@ -337,8 +360,8 @@ void setup() {
   char convertedPortValue[6];
   sprintf(convertedPortValue, "%d", server_port);
   WiFiManagerParameter custom_server_port("server_port", "Server Port", convertedPortValue, 7);
-  WiFiManagerParameter custom_area("area", "Bereich", area, 50);
-  WiFiManagerParameter custom_description("description", "Bezeichnung", description, 50);
+  WiFiManagerParameter custom_area("area", "Bereich", device_area, 50);
+  WiFiManagerParameter custom_description("description", "Bezeichnung", device_description, 50);
 
   wifi_manager.addParameter(&custom_server_ip);
   wifi_manager.addParameter(&custom_server_port);
@@ -370,17 +393,21 @@ void setup() {
 
   strncpy(server_ip, custom_server_ip.getValue(), sizeof(server_ip));
   server_port = (uint16_t)atol(custom_server_port.getValue());
-  strncpy(area, custom_area.getValue(), sizeof(area));
-  strncpy(description, custom_description.getValue(), sizeof(description));
+  strncpy(device_area, custom_area.getValue(), sizeof(device_area));
+  strncpy(device_description, custom_description.getValue(), sizeof(device_description));
 
   Serial.print("Server: ");
   Serial.println(server_ip);
   Serial.print("Port: ");
   Serial.println(server_port);
+  Serial.print("ID: ");
+  Serial.println(device_id);
+  Serial.print("UUID: ");
+  Serial.println(device_uuid);
   Serial.print("Bereich: ");
-  Serial.println(area);
+  Serial.println(device_area);
   Serial.print("Description: ");
-  Serial.println(description);
+  Serial.println(device_description);
 
   if (shouldSaveConfig) {
     saveConfigFile();
@@ -392,7 +419,7 @@ void setup() {
 	// server address, port and URL
   char uri [52];
   strcpy(uri, "/");
-  strcpy(uri, area);
+  strcpy(uri, device_area);
 
 	webSocket.begin(server_ip, server_port, uri);
 
