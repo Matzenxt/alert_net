@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 tungstenite = "0.21.0"
 futures-channel = "0.3.30"
-futures-util = { version = "0.3.28", default-features = false, features = ["sink", "std"] }
+futures-util = { version = "0.3.28", default-features = false, features = ["sink"] }
 tokio = { version = "1.37.0", default-features = false, features = ["full"] }
 tokio-tungstenite = "0.21.0"
 axum = "0.7.5"
@@ -21,6 +21,7 @@ env_logger = "0.11.3"
 serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.115"
 chrono = { version = "0.4.37", features = [ "serde" ] }
-uuid = { version = "1.8.0", features = ["v4"] }
+uuid = { version = "1.8.0", features = ["v4", "serde"] }
+
 
 sqlx = { version = "0.7.4", features = [ "runtime-tokio-rustls", "postgres", "chrono" ] }

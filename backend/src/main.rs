@@ -1,9 +1,11 @@
 mod message;
 mod common;
 
-use std::{
-    env, error::Error, net::SocketAddr, sync::{Arc, Mutex}
-};
+use std::env;
+use std::error::Error;
+use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
+use dotenv::dotenv;
 
 use futures_channel::mpsc::{unbounded, UnboundedSender};
 use futures_util::{future, pin_mut, stream::TryStreamExt, StreamExt};
@@ -158,10 +160,17 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    //let addr: String = env::args().nth(1).unwrap_or_else(|| "192.168.123.160:3000".to_string());
-    let addr: String = env::args().nth(1).unwrap_or_else(|| "192.168.0.88:3000".to_string());
+    dotenv().ok();
 
-    let db_url = "postgres://server:server@localhost:5432/alert_net";
+    let server_address = env::var("SERVER_ADDRESS").expect("SERVER_ADDRESS is not set in .env file");
+    let server_port = env::var("SERVER_PORT").expect("SERVER_PORT is not set in .env file");
+    let database = env::var("DATABASE_URL").expect("DATABASE is not set in .env file");
+
+    let mut server_address = server_address;
+    server_address.push_str(":");
+    server_address.push_str(&*server_port);
+
+    let db_url = database.as_str();
     let pool = sqlx::postgres::PgPool::connect(db_url).await?;
 
     sqlx::migrate!("./../migrations").run(&pool).await?;
@@ -169,13 +178,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let state = PeerMap::new(Mutex::new(Vec::new()));
 
     // Create the event loop and TCP listener we'll accept connections on.
-    let try_socket = TcpListener::bind(&addr).await;
+    let try_socket = TcpListener::bind(&server_address).await;
     let listener = try_socket.expect("Failed to bind");
-    println!("Listening on: {}", addr);
+    println!("Listening on: {}", server_address);
 
     // Let's spawn the handling of each connection in a separate task.
-    while let Ok((stream, addr)) = listener.accept().await {
-        tokio::spawn(handle_connection(state.clone(), stream, addr));
+    while let Ok((stream, socket_address)) = listener.accept().await {
+        tokio::spawn(handle_connection(state.clone(), stream, socket_address));
     }
 
     Ok(())
