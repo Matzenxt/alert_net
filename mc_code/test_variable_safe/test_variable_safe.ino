@@ -244,7 +244,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 			webSocket.sendTXT("Connected");
 
       // Check if divce is registered by server.
-      if (device_uuid.length == 0) {
+      if (memset(device_uuid, 0, sizeof device_uuid)) {
         Serial.println("Device is not registered by server.");
         Serial.println("Getting new uuid from server:");
 

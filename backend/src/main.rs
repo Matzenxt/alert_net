@@ -1,7 +1,8 @@
 mod message;
 mod common;
+mod database;
 
-use std::env;
+use std::{env, thread};
 use std::error::Error;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -11,10 +12,14 @@ use futures_channel::mpsc::{unbounded, UnboundedSender};
 use futures_util::{future, pin_mut, stream::TryStreamExt, StreamExt};
 
 use serde::{Deserialize, Serialize};
-use sqlx::Connection;
+use sqlx::{Acquire, Connection, Pool, Postgres};
+use sqlx::postgres::PgPoolOptions;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tungstenite::{handshake::server::{ErrorResponse, Request, Response}, http::Uri};
+use uuid::Uuid;
+use crate::common::models::device::Device;
+use crate::database::Database;
 use crate::message::send::alert::Alert;
 
 #[derive(Clone)]
@@ -33,7 +38,7 @@ struct ClientOut {
 type Tx = UnboundedSender<Message>;
 type PeerMap = Arc<Mutex<Vec<Client>>>;
 
-async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: SocketAddr) {
+async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: SocketAddr, pool: Arc<Mutex<Pool<Postgres>>>) {
     println!("Incoming TCP connection from: {}", addr);
 
     let mut test: Option<Uri> = None;
@@ -85,7 +90,7 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
                 println!("Binary");
             },
             Message::Text(text) => {
-                println!("Client: {}, URI: {},  Message: {}", temp_client.socket_addr.clone(), temp_client.uri.clone(), text);
+                println!("Client: {}, URI: {}, Message: {}", temp_client.socket_addr.clone(), temp_client.uri.clone(), text);
 
                 let ui_uri = Uri::from_static("/ui");
 
@@ -95,6 +100,41 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
                 let mes = Message::text(text.clone());
                 for recipient in ui_recipients {
                     recipient.tx.unbounded_send(mes.clone()).unwrap();
+                }
+
+                if text.clone().eq("Register") {
+                    println!("register code ausführen");
+                    let device = Device {
+                        id: 0,
+                        uuid: Uuid::new_v4(),
+                        name: "New device".to_string(),
+                        area: temp_client.uri.to_string(),
+                    };
+
+                    let statement = format!("SELECT * FROM {}", "device");
+
+                    println!("state: {}", statement);
+
+                    //let con = pool.lock().unwrap();
+                    println!("1");
+                    //let mut con = block_on(con.acquire()).unwrap();
+                    println!("2");
+                    //let res = block_on(sqlx::query(statement.as_str()).fetch_all(&*pool.lock().unwrap()));
+                    let bla = pool.lock().unwrap();
+                    let res = sqlx::query(statement.as_str()).fetch_all(&*bla);
+
+                    //println!("asdf: {}", res.);
+                    println!("3");
+
+                    let dev = Device {
+                        id: 0,
+                        uuid: Uuid::new_v4(),
+                        name: "New device".to_string(),
+                        area: temp_client.uri.to_string(),
+                    };
+
+                    let clients_message = Message::text(serde_json::to_string(&dev).unwrap());
+                    temp_client.tx.unbounded_send(clients_message).unwrap();
                 }
 
                 if text.clone().eq("Bewegung") {
@@ -171,10 +211,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     server_address.push_str(&*server_port);
 
     let db_url = database.as_str();
-    let pool = sqlx::postgres::PgPool::connect(db_url).await?;
+    let pool = PgPoolOptions::new()
+        .min_connections(10)
+        .connect(db_url).await?;
 
     sqlx::migrate!("./../migrations").run(&pool).await?;
 
+    let device = Device {
+        id: 0,
+        uuid: Uuid::new_v4(),
+        name: "main".to_string(),
+        area: "main update".to_string(),
+    };
+
+    device.update(&pool).await;
+
+    let p: Arc<Mutex<Pool<Postgres>>> = Arc::new(Mutex::new(pool));
     let state = PeerMap::new(Mutex::new(Vec::new()));
 
     // Create the event loop and TCP listener we'll accept connections on.
@@ -184,7 +236,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Let's spawn the handling of each connection in a separate task.
     while let Ok((stream, socket_address)) = listener.accept().await {
-        tokio::spawn(handle_connection(state.clone(), stream, socket_address));
+        tokio::spawn(handle_connection(state.clone(), stream, socket_address, p.clone()));
     }
 
     Ok(())
