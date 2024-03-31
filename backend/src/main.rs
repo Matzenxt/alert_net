@@ -22,6 +22,7 @@ use tungstenite::{handshake::server::{ErrorResponse, Request, Response}, http::U
 use uuid::Uuid;
 use crate::common::models::device::Device;
 use crate::database::Database;
+use crate::message::receive::detection::DetectionMessage;
 use crate::message::send::alert::Alert;
 
 #[derive(Clone)]
@@ -37,10 +38,16 @@ struct ClientOut {
     uri: String,
 }
 
+enum MessageAction {
+    Register((Device, SocketAddr)),
+    Detection(DetectionMessage),
+    Test(String),
+}
+
 type Tx = UnboundedSender<Message>;
 type PeerMap = Arc<Mutex<Vec<Client>>>;
 
-async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: SocketAddr, tx_test: tokio::sync::mpsc::UnboundedSender<Message>) {
+async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: SocketAddr, tx_test: tokio::sync::mpsc::UnboundedSender<MessageAction>) {
     println!("Incoming TCP connection from: {}", addr);
 
     let mut test: Option<Uri> = None;
@@ -104,31 +111,23 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
                     recipient.tx.unbounded_send(mes.clone()).unwrap();
                 }
 
-                let m = Message::text("asdf");
-                tx_test.send(m);
+                // TODO: Remove later on
+                tx_test.send(MessageAction::Test(text.clone()));
 
-                if text.clone().eq("Register") {
-                    println!("register code ausführen");
-                    let device = Device {
-                        id: 0,
-                        uuid: Uuid::new_v4(),
-                        name: "New device".to_string(),
-                        area: temp_client.uri.to_string(),
-                    };
+                let temp: Result<Device, _> = serde_json::from_str(&*text);
+                match temp {
+                    Ok(dev) => {
+                        println!("register code ausführen");
+                        let d = Device {
+                          uuid: Uuid::new_v4(),
+                            ..dev
+                        };
 
-                    let m = Message::text("asdf");
-                    tx_test.send(m);
-
-                    let dev = Device {
-                        id: 0,
-                        uuid: Uuid::new_v4(),
-                        name: "New device".to_string(),
-                        area: temp_client.uri.to_string(),
-                    };
-
-                    let clients_message = Message::text(serde_json::to_string(&dev).unwrap());
-                    temp_client.tx.unbounded_send(clients_message).unwrap();
+                        tx_test.send(MessageAction::Register((d.clone(), temp_client.socket_addr.clone())));
+                    }
+                    Err(_) => {}
                 }
+
 
                 if text.clone().eq("Bewegung") {
                     let broadcast_recipients: Vec<&Client> = peers.iter().filter(|c| (c.uri == temp_client.uri)).collect();
@@ -160,7 +159,6 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
                     }
 
                     let clients_message = Message::text(serde_json::to_string(&clients_out).unwrap());
-                    let broadcast_recipient: Vec<&Client> = peers.iter().filter(|c| (c.uri == temp_client.uri)).collect();
                     temp_client.tx.unbounded_send(clients_message).unwrap();
                 }
 
@@ -210,41 +208,53 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     sqlx::migrate!("./../migrations").run(&pool).await?;
 
-    let device = Device {
-        id: 0,
-        uuid: Uuid::new_v4(),
-        name: "main".to_string(),
-        area: "main update".to_string(),
-    };
 
-    device.update(&pool).await;
 
+    // ---------- Global used variables
     let p: Arc<Mutex<Pool<Postgres>>> = Arc::new(Mutex::new(pool));
     let state = PeerMap::new(Mutex::new(Vec::new()));
 
-    // Create the event loop and TCP listener we'll accept connections on.
-    let try_socket = TcpListener::bind(&server_address).await;
-    let listener = try_socket.expect("Failed to bind");
 
+
+    // ---------- Internal message handler section
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    let peer_map = state.clone();
 
     println!("Starting internal listener");
     tokio::spawn(async move {
         loop {
             let received = rx.recv().await.unwrap();
-            println!("MSG from TX: {}", received);
 
-            let device = Device {
-                id: 0,
-                uuid: Uuid::new_v4(),
-                name: "main".to_string(),
-                area: "main update".to_string(),
-            };
+            match received {
+                MessageAction::Register((device, socket_addr)) => {
+                    println!("Register new device in database");
 
-            let t = p.lock().await;
-            let res = device.update(&t).await;
+                    let t = p.lock().await;
+                    let res = device.insert(&t).await;
+                    println!("RES: {:#?}", res);
+                    let dev = res.unwrap();
+
+                    let peers = block_on(peer_map.lock());
+                    let receiver_devices: Vec<&Client > = peers.iter().filter(|c| (c.socket_addr == socket_addr)).collect();
+                    let receiver_device: &Client = receiver_devices.first().unwrap();
+
+                    let clients_message = Message::text(serde_json::to_string(&dev).unwrap());
+                    receiver_device.tx.unbounded_send(clients_message).unwrap();
+                },
+                MessageAction::Detection(_) => {},
+                MessageAction::Test(msg) => {
+                    println!("Test msg to message handler. MSG: {}", msg);
+                },
+            }
         }
     });
+
+
+
+    // ---------- Websocket starting and loop
+    // Create the event loop and TCP listener we'll accept connections on.
+    let try_socket = TcpListener::bind(&server_address).await;
+    let listener = try_socket.expect("Failed to bind");
 
     println!("Listening on: {}", server_address);
 
@@ -252,6 +262,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     while let Ok((stream, socket_address)) = listener.accept().await {
         tokio::spawn(handle_connection(state.clone(), stream, socket_address, tx.clone()));
     }
+
+
 
     Ok(())
 }

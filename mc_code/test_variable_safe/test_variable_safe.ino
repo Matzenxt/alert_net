@@ -55,7 +55,7 @@ uint16_t server_port = 3000;
 
 // Device:
 uint16_t device_id = 0;
-char device_uuid[50] = "0";
+char device_uuid[50] = "to_register";
 char device_area[50] = "test";
 char device_description[50] = "Gerät 1";
 
@@ -228,6 +228,26 @@ void printAudioDetail(uint8_t type, int value){
   }
 }
 
+void updateDeviceConfigFromServer(uint8_t * text) {
+  JsonDocument config;
+  DeserializationError error = deserializeJson(config, text);
+  Serial.println("Updated device config:");
+  serializeJsonPretty(config, Serial);
+
+  if (!error) {
+    Serial.println("Parsed update message");
+
+    device_id = config["id"].as<uint16_t>();
+    strcpy(device_uuid, config["uuid"]);
+    strcpy(device_area, config["area"]);
+    strcpy(device_description, config["description"]);
+
+    saveConfigFile();
+  } else {
+    Serial.println("Failed to parse config file");
+  }
+}
+
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 	switch(type) {
 		case WStype_DISCONNECTED:
@@ -244,16 +264,35 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 			webSocket.sendTXT("Connected");
 
       // Check if divce is registered by server.
-      if (memset(device_uuid, 0, sizeof device_uuid)) {
+      Serial.print("Saved uuid: ");
+      Serial.println(device_uuid);
+      Serial.print("Res: ");
+      Serial.println(strcmp(device_uuid, "to_register"));
+
+
+      if (strcmp(device_uuid, "to_register") == 0) {
         Serial.println("Device is not registered by server.");
         Serial.println("Getting new uuid from server:");
 
-        webSocket.sendTXT("Register");
+        JsonDocument doc;
+        doc["id"] = device_id;
+        doc["uuid"] = "39472baa-7bcf-4d56-9829-f17bb5b543cd";
+        doc["description"] = device_description;
+        doc["area"] = device_area;
+
+        String output = "";
+
+        serializeJsonPretty(doc, output);
+
+        webSocket.sendTXT(output);
+      } else {
+        Serial.println("Device already registered.");
       }
 			break;
 		case WStype_TEXT:
 			Serial.printf("[WSc] get text: %s\n", payload);
 
+      updateDeviceConfigFromServer(payload);
 
       deserializeJson(doc, payload);
 
@@ -454,7 +493,7 @@ void loop() {
   // Websocket part:
 	webSocket.loop();
   
-  if (connected && lastUpdate + messageInterval < millis()) {
+  if (false && connected && lastUpdate + messageInterval < millis()) {
     Serial.println("Send demo message to server");
     webSocket.sendTXT("Demo maessage");
     counter = counter + 1;

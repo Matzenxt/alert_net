@@ -9,54 +9,33 @@ impl Database<Device> for Device {
         "device"
     }
 
-    fn insert(&self, pool: &PgPool) -> Result<usize, Error> {
+    async fn insert(&self, pool: &PgPool) -> Result<Device, Error> {
         println!("Insert device: {}", Self::table_name());
 
         let mut args = PgArguments::default();
         args.add(&self.uuid);
-        args.add(&self.name);
+        args.add(&self.description);
         args.add(&self.area);
 
-        let statement = format!("INSERT INTO {} (uuid, description, area) VALUES ($1, $2, $3)", Self::table_name());
+        let statement = format!("INSERT INTO {} (uuid, description, area) VALUES ($1, $2, $3) RETURNING id, uuid, description, area", Self::table_name());
 
-        println!("state: {}", statement);
+        let mut con = pool.acquire().await?;
 
-        let mut con = block_on(pool.acquire()).unwrap();
+        // TODO: Add error handling
+        let res = sqlx::query_as_with(statement.as_str(), args).fetch_one(&mut *con).await?;
 
-        let res = block_on(sqlx::query_with(statement.as_str(), args).execute(&mut *con));
-
-        println!("Res: {:#?}", res);
-
-        Ok(0)
+        Ok(res)
     }
 
     async fn update(&self, pool: &Pool<Postgres>) -> Result<(), Error> {
-        println!("Update device: {}", Self::table_name());
-
-        let mut args = PgArguments::default();
-        args.add(&self.uuid);
-        args.add(&self.name);
-        args.add(&self.area);
-
-        let statement = format!("INSERT INTO {} (uuid, description, area) VALUES ($1, $2, $3)", Self::table_name());
-
-        println!("state: {}", statement);
-
-        //let mut con = block_on(pool.acquire()).unwrap();
-        let mut con = pool.acquire().await?;
-
-        let res = sqlx::query_with(statement.as_str(), args).execute(&mut *con).await;
-
-        println!("Res: {:#?}", res);
-
-        Ok(())
-    }
-
-    fn get_all(pool: &Pool<Postgres>) -> Result<Vec<Device>, Error> {
         todo!()
     }
 
-    fn get_by_id(id: usize, pool: &Pool<Postgres>) -> Result<Vec<Device>, Error> {
+    async fn get_all(pool: &Pool<Postgres>) -> Result<Vec<Device>, Error> {
+        todo!()
+    }
+
+    async fn get_by_id(id: i64, pool: &Pool<Postgres>) -> Result<Vec<Device>, Error> {
         todo!()
     }
 }
