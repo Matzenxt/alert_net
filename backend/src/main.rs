@@ -5,8 +5,9 @@ mod database;
 use std::{env, thread};
 use std::error::Error;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use dotenv::dotenv;
+use futures::executor::block_on;
 
 use futures_channel::mpsc::{unbounded, UnboundedSender};
 use futures_util::{future, pin_mut, stream::TryStreamExt, StreamExt};
@@ -15,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Acquire, Connection, Pool, Postgres};
 use sqlx::postgres::PgPoolOptions;
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tungstenite::{handshake::server::{ErrorResponse, Request, Response}, http::Uri};
 use uuid::Uuid;
@@ -38,7 +40,7 @@ struct ClientOut {
 type Tx = UnboundedSender<Message>;
 type PeerMap = Arc<Mutex<Vec<Client>>>;
 
-async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: SocketAddr, pool: Arc<Mutex<Pool<Postgres>>>) {
+async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: SocketAddr, tx_test: tokio::sync::mpsc::UnboundedSender<Message>) {
     println!("Incoming TCP connection from: {}", addr);
 
     let mut test: Option<Uri> = None;
@@ -72,7 +74,7 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
 
     let temp_client = client.clone();
 
-    peer_map.lock().unwrap().push(client);
+    peer_map.lock().await.push(client);
 
     let (outgoing, incoming) = ws_stream.split();
 
@@ -94,13 +96,16 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
 
                 let ui_uri = Uri::from_static("/ui");
 
-                let peers = peer_map.lock().unwrap();
+                let peers = block_on(peer_map.lock());
                 let ui_recipients: Vec<&Client> = peers.iter().filter(|c| (c.uri == ui_uri)).collect();
 
                 let mes = Message::text(text.clone());
                 for recipient in ui_recipients {
                     recipient.tx.unbounded_send(mes.clone()).unwrap();
                 }
+
+                let m = Message::text("asdf");
+                tx_test.send(m);
 
                 if text.clone().eq("Register") {
                     println!("register code ausführen");
@@ -111,20 +116,8 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
                         area: temp_client.uri.to_string(),
                     };
 
-                    let statement = format!("SELECT * FROM {}", "device");
-
-                    println!("state: {}", statement);
-
-                    //let con = pool.lock().unwrap();
-                    println!("1");
-                    //let mut con = block_on(con.acquire()).unwrap();
-                    println!("2");
-                    //let res = block_on(sqlx::query(statement.as_str()).fetch_all(&*pool.lock().unwrap()));
-                    let bla = pool.lock().unwrap();
-                    let res = sqlx::query(statement.as_str()).fetch_all(&*bla);
-
-                    //println!("asdf: {}", res.);
-                    println!("3");
+                    let m = Message::text("asdf");
+                    tx_test.send(m);
 
                     let dev = Device {
                         id: 0,
@@ -194,8 +187,8 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
 
     println!("{} disconnected", &addr);
     let temp_addr = addr.clone();
-    let index = peer_map.lock().unwrap().iter().position(|c| c.socket_addr == temp_addr).unwrap();
-    peer_map.lock().unwrap().remove(index);
+    let index = peer_map.lock().await.iter().position(|c| c.socket_addr == temp_addr).unwrap();
+    peer_map.lock().await.remove(index);
 }
 
 #[tokio::main]
@@ -232,11 +225,32 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create the event loop and TCP listener we'll accept connections on.
     let try_socket = TcpListener::bind(&server_address).await;
     let listener = try_socket.expect("Failed to bind");
+
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+
+    println!("Starting internal listener");
+    tokio::spawn(async move {
+        loop {
+            let received = rx.recv().await.unwrap();
+            println!("MSG from TX: {}", received);
+
+            let device = Device {
+                id: 0,
+                uuid: Uuid::new_v4(),
+                name: "main".to_string(),
+                area: "main update".to_string(),
+            };
+
+            let t = p.lock().await;
+            let res = device.update(&t).await;
+        }
+    });
+
     println!("Listening on: {}", server_address);
 
     // Let's spawn the handling of each connection in a separate task.
     while let Ok((stream, socket_address)) = listener.accept().await {
-        tokio::spawn(handle_connection(state.clone(), stream, socket_address, p.clone()));
+        tokio::spawn(handle_connection(state.clone(), stream, socket_address, tx.clone()));
     }
 
     Ok(())
