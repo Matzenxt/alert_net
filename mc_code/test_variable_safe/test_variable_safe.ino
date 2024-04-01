@@ -58,6 +58,7 @@ uint16_t device_id = 0;
 char device_uuid[50] = "to_register";
 char device_area[50] = "test";
 char device_description[50] = "Gerät 1";
+uint8_t device_speaker_volume = 15; // Speaker volume. Set between 0 and 30.
 
 void saveConfigFile() {
   Serial.println(F("Saving configuration..."));
@@ -69,6 +70,7 @@ void saveConfigFile() {
   config["device"]["uuid"] = device_uuid;
   config["device"]["area"] = device_area;
   config["device"]["description"] = device_description;
+  config["device"]["speaker_volume"] = device_speaker_volume;
 
   File configFile = SPIFFS.open(JSON_CONFIG_FILE, "w");
   if (!configFile) {
@@ -85,7 +87,7 @@ void saveConfigFile() {
 }
 
 bool loadConfigFile() {
-  //SPIFFS.format();
+  SPIFFS.format();
 
   Serial.println("Mounting file system.");
 
@@ -111,6 +113,7 @@ bool loadConfigFile() {
           strcpy(device_uuid, config["device"]["uuid"]);
           strcpy(device_area, config["device"]["area"]);
           strcpy(device_description, config["device"]["description"]);
+          device_speaker_volume = config["device"]["speaker_volume"].as<uint8_t>();
 
           return true;
         } else {
@@ -163,8 +166,7 @@ void initAudio() {
   }
   Serial.println(F("DFPlayer Mini online."));
 
-  myDFPlayer.volume(30);  //Set volume value. From 0 to 30
-  //myDFPlayer.play(1);  //Play the first mp3
+  myDFPlayer.volume(device_speaker_volume);  //Set volume value. From 0 to 30
 }
 
 void printAudioDetail(uint8_t type, int value){
@@ -421,13 +423,17 @@ void setup() {
   WiFiManagerParameter custom_server_port("server_port", "Server Port", convertedPortValue, 7);
   WiFiManagerParameter custom_area("area", "Bereich", device_area, 50);
   WiFiManagerParameter custom_description("description", "Bezeichnung", device_description, 50);
+  char convertedVolumeValue[2];
+  sprintf(convertedVolumeValue, "%d", device_speaker_volume);
+  WiFiManagerParameter custom_speaker_volume("15", "Lautstärke. Min: 0, Max: 30", convertedVolumeValue, 2);
 
   wifi_manager.addParameter(&custom_server_ip);
   wifi_manager.addParameter(&custom_server_port);
   wifi_manager.addParameter(&custom_area);
   wifi_manager.addParameter(&custom_description);
+  wifi_manager.addParameter(&custom_speaker_volume);
 
-  //wifi_manager.resetSettings();
+  wifi_manager.resetSettings();
 
   if (forceConfig) {
     if (!wifi_manager.startConfigPortal("AlertNet", "123456789")) {
@@ -454,6 +460,7 @@ void setup() {
   server_port = (uint16_t)atol(custom_server_port.getValue());
   strncpy(device_area, custom_area.getValue(), sizeof(device_area));
   strncpy(device_description, custom_description.getValue(), sizeof(device_description));
+  server_port = (uint8_t)atol(custom_server_port.getValue());
 
   Serial.print("Server: ");
   Serial.println(server_ip);
@@ -467,6 +474,8 @@ void setup() {
   Serial.println(device_area);
   Serial.print("Description: ");
   Serial.println(device_description);
+  Serial.print("Speaker volume: ");
+  Serial.println(device_speaker_volume);
 
   if (shouldSaveConfig) {
     saveConfigFile();
@@ -490,7 +499,6 @@ void setup() {
 
 	// try ever 5000 again if connection has failed
 	webSocket.setReconnectInterval(5000);
-  webSocket.setExtraHeaders("room: Laden");
 
   // start heartbeat (optional)
   // ping server every 15000 ms
