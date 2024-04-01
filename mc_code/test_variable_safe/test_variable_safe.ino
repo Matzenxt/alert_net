@@ -38,7 +38,7 @@ bool connected = false;
 // Json:
 JsonDocument doc;
 bool led = false;
-bool noise = true;
+bool speaker = true;
 bool reboot = false;
 
 // Motion:
@@ -231,18 +231,41 @@ void printAudioDetail(uint8_t type, int value){
 void updateDeviceConfigFromServer(uint8_t * text) {
   JsonDocument config;
   DeserializationError error = deserializeJson(config, text);
-  Serial.println("Updated device config:");
-  serializeJsonPretty(config, Serial);
 
   if (!error) {
-    Serial.println("Parsed update message");
+    if (config.containsKey("uuid")) {
+      Serial.println("Updated device config:");
+      serializeJsonPretty(config, Serial);
 
-    device_id = config["id"].as<uint16_t>();
-    strcpy(device_uuid, config["uuid"]);
-    strcpy(device_area, config["area"]);
-    strcpy(device_description, config["description"]);
+      device_id = config["id"].as<uint16_t>();
+      strcpy(device_uuid, config["uuid"]);
+      strcpy(device_area, config["area"]);
+      strcpy(device_description, config["description"]);
 
-    saveConfigFile();
+      saveConfigFile();
+    }
+  } else {
+    Serial.println("Failed to parse config file");
+  }
+}
+
+void alert(uint8_t * text) {
+  JsonDocument alert;
+  DeserializationError error = deserializeJson(alert, text);
+
+  if (!error) {
+    if (alert.containsKey("led")) {
+      led = alert["led"].as<bool>();
+      speaker = alert["speaker"].as<bool>();
+
+      Serial.printf("LED: %u\n", led);
+      Serial.printf("Speaker: %u\n", speaker);
+
+      // actions:
+      if (speaker == true) {
+        myDFPlayer.play(1);
+      }
+    }
   } else {
     Serial.println("Failed to parse config file");
   }
@@ -292,22 +315,12 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 		case WStype_TEXT:
 			Serial.printf("[WSc] get text: %s\n", payload);
 
+
+      // Check for json messages
       updateDeviceConfigFromServer(payload);
+      alert(payload);
 
-      deserializeJson(doc, payload);
 
-      led = doc["led"].as<bool>();
-      noise = doc["noise"].as<bool>();
-      reboot = doc["reboot"].as<bool>();
-
-      Serial.printf("LED: %u\n", led);
-      Serial.printf("Noise: %u\n", noise);
-      Serial.printf("Reboot: %u\n", reboot);
-
-      if (noise == true) {
-        myDFPlayer.play(1);
-      }
-    
       if (reboot == true) {
         digitalWrite(LED_BUILTIN, HIGH);
         delay(1000);
@@ -324,10 +337,6 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
         ESP.restart();
       }
       
-			// send message to server
-      if(digitalRead(LED_BUILTIN == HIGH)) {
-			  //webSocket.sendTXT("Licht");
-      }
 			break;
 		case WStype_BIN:
 			Serial.printf("[WSc] get binary length: %u\n", length);
@@ -354,16 +363,19 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
     }
 }
 
-void sendDetectionMessage() {
+void sendDetectionMessage(String source) {
   JsonDocument doc;
 
-  doc["id"] = 0;
   doc["device"]["id"] = device_id;
   doc["device"]["uuid"] = device_uuid;
-  doc["device"]["name"] = device_description;
+  doc["device"]["description"] = device_description;
   doc["device"]["area"] = device_area;
-  doc["source"] = "Motion";
-  doc["timestamp"] = "2023-09-18T13:40:52.548045700+00:00"; // Placeholder timestamp so message is not rejected from server.
+  doc["source"] = source;
+
+  String output = "";
+  serializeJsonPretty(doc, output);
+
+  webSocket.sendTXT(output);
 }
 
 void setup() {
@@ -488,22 +500,20 @@ void setup() {
 }
 
 int counter = 0;
-
 void loop() {
   // Websocket part:
 	webSocket.loop();
   
-  if (false && connected && lastUpdate + messageInterval < millis()) {
+  if (connected && lastUpdate + messageInterval < millis()) {
     Serial.println("Send demo message to server");
-    webSocket.sendTXT("Demo maessage");
-    counter = counter + 1;
+    sendDetectionMessage("Bewegung");
     lastUpdate = millis();
   }
 
   if(connected && counter == 5) {
-    Serial.println("Send Reboot Message");
-    webSocket.sendTXT("Reboot");
-    counter = counter + 1;
+    //Serial.println("Send Reboot Message");
+    //webSocket.sendTXT("Reboot");
+    counter = 0;
   }
 
   if(digitalRead(motionPin) == HIGH) {
@@ -511,12 +521,9 @@ void loop() {
       digitalWrite(LED_BUILTIN, LOW);
 
       Serial.println("Bewegung");
-      //myDFPlayer.play(1);
-
-      webSocket.sendTXT("Bewegung");
+      sendDetectionMessage("Bewegung");
 
       pirState = HIGH;
-
     }
   } else {
     if(pirState == HIGH) {

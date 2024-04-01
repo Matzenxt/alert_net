@@ -80,6 +80,7 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
     };
 
     let temp_client = client.clone();
+    let all_uri = Uri::from_static("all");
 
     peer_map.lock().await.push(client);
 
@@ -128,13 +129,35 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
                     Err(_) => {}
                 }
 
+                let temp: Result<DetectionMessage, _> = serde_json::from_str(&*text);
+                match temp {
+                    Ok(detection_message) => {
+                        println!("Detection");
+
+                        tx_test.send(MessageAction::Detection(detection_message));
+
+                        let broadcast_recipients: Vec<&Client> = peers.iter().filter(|c| (c.uri == temp_client.uri || c.uri == all_uri)).collect();
+
+                        let alert = Alert {
+                            led: true,
+                            speaker: true,
+                        };
+
+                        let temp_msg = Message::text(serde_json::to_string(&alert).unwrap());
+
+                        for recipient in broadcast_recipients {
+                            recipient.tx.unbounded_send(temp_msg.clone()).unwrap();
+                        }
+                    }
+                    Err(_) => {}
+                }
 
                 if text.clone().eq("Bewegung") {
                     let broadcast_recipients: Vec<&Client> = peers.iter().filter(|c| (c.uri == temp_client.uri)).collect();
 
                     let alert = Alert {
                         led: true,
-                        noise: true,
+                        speaker: true,
                     };
 
                     let temp_msg = Message::text(serde_json::to_string(&alert).unwrap());
@@ -241,9 +264,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     let clients_message = Message::text(serde_json::to_string(&dev).unwrap());
                     receiver_device.tx.unbounded_send(clients_message).unwrap();
                 },
-                MessageAction::Detection(_) => {},
+                MessageAction::Detection(detectionM_message) => {
+                    let pool = p.lock().await;
+                    let result = detectionM_message.insert(&pool).await;
+                    println!("RES: {:#?}", result);
+                },
                 MessageAction::Test(msg) => {
-                    println!("Test msg to message handler. MSG: {}", msg);
+                    //println!("Test msg to message handler. MSG: {}", msg);
                 },
             }
         }

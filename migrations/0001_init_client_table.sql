@@ -1,15 +1,25 @@
-create table Device (
-    id integer not null,
-    uuid uuid not null,
-    area varchar default null,
-    description varchar default null,
-    PRIMARY KEY (id)
+CREATE TABLE Device
+(
+    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 ),
+    uuid uuid NOT NULL,
+    area varchar NOT NULL,
+    description varchar NOT NULL,
+    CONSTRAINT id PRIMARY KEY (id)
+        INCLUDE(id),
+    CONSTRAINT uuid UNIQUE (uuid)
+        INCLUDE(uuid)
 );
 
-create table Alert (
-    id integer not null,
-    device_id integer not null,
-    source text not null,
-    timestamp timestamp not null,
-    PRIMARY KEY (id)
+CREATE TABLE Detection
+(
+    id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 ),
+    device_id bigint NOT NULL,
+    source text NOT NULL,
+    timestamp timestamp with time zone NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY (device_id)
+        REFERENCES device (id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
+        NOT VALID
 );

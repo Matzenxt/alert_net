@@ -1,4 +1,3 @@
-use futures::executor::block_on;
 use sqlx::{Arguments, Error, PgPool, Pool, Postgres};
 use sqlx::postgres::PgArguments;
 use crate::common::models::device::Device;
@@ -10,8 +9,6 @@ impl Database<Device> for Device {
     }
 
     async fn insert(&self, pool: &PgPool) -> Result<Device, Error> {
-        println!("Insert device: {}", Self::table_name());
-
         let mut args = PgArguments::default();
         args.add(&self.uuid);
         args.add(&self.description);
@@ -36,6 +33,17 @@ impl Database<Device> for Device {
     }
 
     async fn get_by_id(id: i64, pool: &Pool<Postgres>) -> Result<Vec<Device>, Error> {
-        todo!()
+        let statement = format!(
+            "SELECT * FROM {} WHERE id = $1",
+            Self::table_name(),
+        );
+
+        let mut args = PgArguments::default();
+        args.add(id);
+
+        let mut con = pool.acquire().await?;
+        let res = sqlx::query_as_with(statement.as_str(), args).fetch_all(&mut *con).await?;
+
+        Ok(res)
     }
 }

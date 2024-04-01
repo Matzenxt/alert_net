@@ -1,7 +1,7 @@
 mod device;
+mod detection;
 
-use std::sync::MutexGuard;
-use sqlx::{Error, PgPool, Pool, Postgres};
+use sqlx::{Error, Pool, Postgres};
 
 pub trait Database<T> {
     fn table_name() -> &'static str;
