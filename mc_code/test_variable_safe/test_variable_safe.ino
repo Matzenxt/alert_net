@@ -58,7 +58,7 @@ uint16_t device_id = 0;
 char device_uuid[50] = "to_register";
 char device_area[50] = "test";
 char device_description[50] = "Gerät 1";
-uint8_t device_speaker_volume = 15; // Speaker volume. Set between 0 and 30.
+uint16_t device_speaker_volume = 15; // Speaker volume. Set between 0 and 30.
 
 void saveConfigFile() {
   Serial.println(F("Saving configuration..."));
@@ -113,7 +113,7 @@ bool loadConfigFile() {
           strcpy(device_uuid, config["device"]["uuid"]);
           strcpy(device_area, config["device"]["area"]);
           strcpy(device_description, config["device"]["description"]);
-          device_speaker_volume = config["device"]["speaker_volume"].as<uint8_t>();
+          device_speaker_volume = config["device"]["speaker_volume"].as<uint16_t>();
 
           return true;
         } else {
@@ -460,7 +460,7 @@ void setup() {
   server_port = (uint16_t)atol(custom_server_port.getValue());
   strncpy(device_area, custom_area.getValue(), sizeof(device_area));
   strncpy(device_description, custom_description.getValue(), sizeof(device_description));
-  server_port = (uint8_t)atol(custom_server_port.getValue());
+  device_speaker_volume = (uint16_t)atol(custom_server_port.getValue());
 
   Serial.print("Server: ");
   Serial.println(server_ip);
@@ -514,7 +514,7 @@ void loop() {
   
   if (connected && lastUpdate + messageInterval < millis()) {
     Serial.println("Send demo message to server");
-    sendDetectionMessage("Bewegung");
+    //sendDetectionMessage("Bewegung");
     lastUpdate = millis();
   }
 
