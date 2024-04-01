@@ -308,7 +308,9 @@ void setup() {
   sprintf(convertedPortValue, "%d", server_port);
   WiFiManagerParameter custom_server_port("server_port", "Server Port", convertedPortValue, 7);
   WiFiManagerParameter custom_area("area", "Bereich", device_area, 50);
-  WiFiManagerParameter custom_speaker_volume("15", "Lautstärke. Min: 0, Max: 30", device_area, 2);
+  char convertedVolumeValue[2];
+  sprintf(convertedVolumeValue, "%d", device_speaker_volume);
+  WiFiManagerParameter custom_speaker_volume("15", "Lautstärke. Min: 0, Max: 30", convertedVolumeValue, 2);
 
   wifi_manager.addParameter(&custom_server_ip);
   wifi_manager.addParameter(&custom_server_port);
