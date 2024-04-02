@@ -265,6 +265,7 @@ void alert(uint8_t * text) {
 
       // actions:
       if (speaker == true) {
+        myDFPlayer.volume(device_speaker_volume);
         myDFPlayer.play(1);
       }
     }

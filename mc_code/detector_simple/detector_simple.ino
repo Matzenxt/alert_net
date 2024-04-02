@@ -77,7 +77,7 @@ void saveConfigFile() {
 }
 
 bool loadConfigFile() {
-  //SPIFFS.format();
+  SPIFFS.format();
 
   Serial.println("Mounting file system.");
 
@@ -263,6 +263,7 @@ void alertActions() {
   Serial.println("Received alert.");
 
   //Code to perform alert.
+  myDFPlayer.volume(device_speaker_volume);
   myDFPlayer.play(1);
 }
 
@@ -308,9 +309,9 @@ void setup() {
   sprintf(convertedPortValue, "%d", server_port);
   WiFiManagerParameter custom_server_port("server_port", "Server Port", convertedPortValue, 7);
   WiFiManagerParameter custom_area("area", "Bereich", device_area, 50);
-  char convertedVolumeValue[2];
+  char convertedVolumeValue[6];
   sprintf(convertedVolumeValue, "%d", device_speaker_volume);
-  WiFiManagerParameter custom_speaker_volume("15", "Lautstärke. Min: 0, Max: 30", convertedVolumeValue, 2);
+  WiFiManagerParameter custom_speaker_volume("15", "Lautstärke. Min: 0, Max: 30", convertedVolumeValue, 7);
 
   wifi_manager.addParameter(&custom_server_ip);
   wifi_manager.addParameter(&custom_server_port);
