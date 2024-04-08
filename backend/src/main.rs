@@ -152,23 +152,6 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
                     Err(_) => {}
                 }
 
-                if text.clone().eq("Bewegung") {
-                    let broadcast_recipients: Vec<&Client> = peers.iter().filter(|c| (c.uri == temp_client.uri)).collect();
-
-                    let alert = Alert {
-                        led: true,
-                        speaker: true,
-                    };
-
-                    let temp_msg = Message::text(serde_json::to_string(&alert).unwrap());
-
-                    let mes = Message::text(text.clone());
-                    for recipient in broadcast_recipients {
-                        recipient.tx.unbounded_send(mes.clone()).unwrap();
-                        recipient.tx.unbounded_send(temp_msg.clone()).unwrap();
-                    }
-                }
-
                 if text.eq("Get Clients") {
                     let clients: Vec<&Client> = peers.iter().filter(|_c| true).collect();
 
