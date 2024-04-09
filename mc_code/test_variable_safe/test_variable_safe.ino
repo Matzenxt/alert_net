@@ -87,7 +87,7 @@ void saveConfigFile() {
 }
 
 bool loadConfigFile() {
-  SPIFFS.format();
+  //SPIFFS.format();
 
   Serial.println("Mounting file system.");
 
@@ -166,7 +166,18 @@ void initAudio() {
   }
   Serial.println(F("DFPlayer Mini online."));
 
-  myDFPlayer.volume(device_speaker_volume);  //Set volume value. From 0 to 30
+  int volume = 30;
+  if (device_speaker_volume > 30) {
+    volume = 30;
+  } else if (device_speaker_volume < 0) {
+    volume = 0;
+  } else {
+    volume = device_speaker_volume;
+  }
+  Serial.println(device_speaker_volume);
+  Serial.println(volume);
+
+  myDFPlayer.volume(volume);  //Set volume value. From 0 to 30
 }
 
 void printAudioDetail(uint8_t type, int value){
@@ -265,7 +276,6 @@ void alert(uint8_t * text) {
 
       // actions:
       if (speaker == true) {
-        myDFPlayer.volume(device_speaker_volume);
         myDFPlayer.play(1);
       }
     }
@@ -351,6 +361,7 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
     case WStype_PING:
       // pong will be send automatically
       Serial.printf("[WSc] get ping\n");
+      
       break;
     case WStype_PONG:
       // answer to a ping we send
@@ -434,7 +445,7 @@ void setup() {
   wifi_manager.addParameter(&custom_description);
   wifi_manager.addParameter(&custom_speaker_volume);
 
-  wifi_manager.resetSettings();
+  //wifi_manager.resetSettings();
 
   if (forceConfig) {
     if (!wifi_manager.startConfigPortal("AlertNet", "123456789")) {
@@ -508,22 +519,9 @@ void setup() {
   webSocket.enableHeartbeat(15000, 3000, 2);
 }
 
-int counter = 0;
 void loop() {
   // Websocket part:
 	webSocket.loop();
-  
-  if (connected && lastUpdate + messageInterval < millis()) {
-    Serial.println("Send demo message to server");
-    //sendDetectionMessage("Bewegung");
-    lastUpdate = millis();
-  }
-
-  if(connected && counter == 5) {
-    //Serial.println("Send Reboot Message");
-    //webSocket.sendTXT("Reboot");
-    counter = 0;
-  }
 
   if(digitalRead(motionPin) == HIGH) {
     if(pirState == LOW) {
