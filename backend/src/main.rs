@@ -89,7 +89,7 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
 
     let broadcast_incoming = incoming.try_for_each(|msg| {
         let timestamp = Utc::now();
-        print!("{} - {} - URI: {}: ", timestamp.format("%Y-%m-%d - %H:%M"), temp_client.socket_addr, temp_client.uri);
+        print!("{} - {} - URI: {}: ", timestamp.format("%Y-%m-%d - %H:%M:%S"), temp_client.socket_addr, temp_client.uri);
 
         match msg {
             Message::Ping(_ping) => {
