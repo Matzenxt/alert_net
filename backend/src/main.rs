@@ -6,6 +6,7 @@ use std::{env, thread};
 use std::error::Error;
 use std::net::SocketAddr;
 use std::sync::{Arc};
+use chrono::Utc;
 use dotenv::dotenv;
 use futures::executor::block_on;
 
@@ -87,7 +88,8 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
     let (outgoing, incoming) = ws_stream.split();
 
     let broadcast_incoming = incoming.try_for_each(|msg| {
-        //println!("Received a message from {}: {}", addr, msg.to_text().unwrap());
+        let timestamp = Utc::now();
+        print!("{} - {} - URI: {}: ", timestamp.format("%Y-%m-%d - %H:%M"), temp_client.socket_addr, temp_client.uri);
 
         match msg {
             Message::Ping(_ping) => {
