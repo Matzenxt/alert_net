@@ -7,7 +7,7 @@
     let clients: Ref<Array<ClientOut>> = ref<Array<ClientOut>>([]);
 
 
-    let ws = new WebSocket('ws://192.168.0.88:3000/ui');
+    let ws = new WebSocket('ws://192.168.0.76:3000/ui');
     
     ws.onmessage = (event) => {
         console.log("Message");
@@ -16,25 +16,26 @@
         console.log("Type: " + event.type);
 
         clients.value = JSON.parse(event.data);
-
     };
 
-
     ws.onopen = (event) => {
-        ws.send("Here's some text that the server is urgently awaiting!");
+      const message: string = "Here's some text that the server is urgently awaiting!";
+        ws.send(message);
     };
 
     const {pause, resume, isActive} = useIntervalFn(getClients, 5000);
 
     function getClients() {
       if (ws.OPEN) {
-        ws.send("Get Clients");
+        const message: string = "Get Clients";
+        ws.send(message);
       }
     }
 
     function test() {
         if (ws.OPEN) {
-            ws.send("Hello from ui");
+          const message: string = "Hello from ui";
+          ws.send(message);
         }
     }
 
@@ -43,12 +44,12 @@
     }
 
     function open() {
-      ws = new WebSocket('ws://192.168.0.88:3000/all');
+      ws = new WebSocket('ws://192.168.0.76:3000/all');
     }
 </script>
 
 <template>
-  <v-card max-height="800" height="800" min-height="800">
+  <v-card max-height="500" height="500" min-height="500">
     <v-card-title>Dashboard</v-card-title>
     <v-divider/>
     <v-card-text>
@@ -82,11 +83,20 @@
 
   </v-card>
 
-  <v-container>
-    <v-row v-for="(message, index) in messages" :key="index">
-      {{ message }}
-    </v-row>
-  </v-container>
+  <v-card height="300">
+    <v-card-text>
+      <v-virtual-scroll
+          :height="250"
+          :items="messages"
+      >
+        <template v-slot:default="{ item }">
+          {{ item }}
+        </template>
+      </v-virtual-scroll>
+    </v-card-text>
+  </v-card>
+
+  <DetectionTest/>
 
 
 </template>

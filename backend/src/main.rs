@@ -2,7 +2,7 @@ mod message;
 mod common;
 mod database;
 
-use std::{env, thread};
+use std::env;
 use std::error::Error;
 use std::net::SocketAddr;
 use std::sync::{Arc};
@@ -12,6 +12,7 @@ use futures::executor::block_on;
 
 use futures_channel::mpsc::{unbounded, UnboundedSender};
 use futures_util::{future, pin_mut, stream::TryStreamExt, StreamExt};
+use ntfy::{Auth, Dispatcher, Payload, Priority};
 
 use serde::{Deserialize, Serialize};
 use sqlx::{Acquire, Connection, Pool, Postgres};
@@ -114,9 +115,8 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
                     recipient.tx.unbounded_send(mes.clone()).unwrap();
                 }
 
-                // TODO: Remove later on
-                tx_test.send(MessageAction::Test(text.clone()));
 
+                // ---- Device register block
                 let temp: Result<Device, _> = serde_json::from_str(&*text);
                 match temp {
                     Ok(dev) => {
@@ -131,6 +131,8 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
                     Err(_) => {}
                 }
 
+
+                // ---- Detection message block
                 let temp: Result<DetectionMessage, _> = serde_json::from_str(&*text);
                 match temp {
                     Ok(detection_message) => {
@@ -154,6 +156,8 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
                     Err(_) => {}
                 }
 
+
+                // ---- UI Messages
                 if text.eq("Get Clients") {
                     let clients: Vec<&Client> = peers.iter().filter(|_c| true).collect();
 
@@ -170,6 +174,9 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
                     temp_client.tx.unbounded_send(clients_message).unwrap();
                 }
 
+
+                // ---- Add new custom message down below
+
             },
             Message::Close(_close) => {
                 println!("Close");
@@ -178,9 +185,6 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
                 println!("Frame");
             }
         }
-
-
-
 
 
         future::ok(())
@@ -204,6 +208,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let server_address = env::var("SERVER_ADDRESS").expect("SERVER_ADDRESS is not set in .env file");
     let server_port = env::var("SERVER_PORT").expect("SERVER_PORT is not set in .env file");
     let database = env::var("DATABASE_URL").expect("DATABASE is not set in .env file");
+    let ntfy_url = env::var("NTFY_URL").expect("NTFY URL is not set in .env file");
 
     let mut server_address = server_address;
     server_address.push_str(":");
@@ -217,11 +222,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
     sqlx::migrate!("./../migrations").run(&pool).await?;
 
 
-
     // ---------- Global used variables
     let p: Arc<Mutex<Pool<Postgres>>> = Arc::new(Mutex::new(pool));
     let state = PeerMap::new(Mutex::new(Vec::new()));
+    let ntfy_dispatcher = Arc::new(
+        Dispatcher::builder(ntfy_url)
+            //.credentials(Auth::new("username", "password"))
+            .build()?
+    );
 
+
+    // Startup message
+    let payload = Payload::new("Test")
+        .title("Alert Net server")
+        .message("Alert Net server gestartet")
+        .priority(Priority::Default);
+
+    let ntfy_result = ntfy_dispatcher.send(&payload).await;
+    println!("NTFY: {:#?}", ntfy_result);
 
 
     // ---------- Internal message handler section
@@ -249,11 +267,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     let clients_message = Message::text(serde_json::to_string(&dev).unwrap());
                     receiver_device.tx.unbounded_send(clients_message).unwrap();
                 },
-                MessageAction::Detection(detectionM_message) => {
+                MessageAction::Detection(detection_message) => {
                     let pool = p.lock().await;
-                    let result = detectionM_message.insert(&pool).await;
+                    let result = detection_message.insert(&pool).await;
+
+                    let room = detection_message.device.area;
                     println!("RES: {:#?}", result);
-                },
+
+                    let payload = Payload::new(&room)
+                        .title(format!("Bereich {}", room))
+                        .message(format!("Gerät: {}, Auslöser: {}", detection_message.device.description, detection_message.source))
+                        .priority(Priority::Default);
+
+                    let bla = ntfy_dispatcher.send(&payload).await;
+                    println!("NTFY: {:#?}", bla);
+                }
                 MessageAction::Test(msg) => {
                     //println!("Test msg to message handler. MSG: {}", msg);
                 },
