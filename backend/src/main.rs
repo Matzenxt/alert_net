@@ -44,6 +44,8 @@ enum MessageAction {
     Register((Device, SocketAddr)),
     Detection(DetectionMessage),
     Test(String),
+    CloseConnection(String, String),
+    OpenConnection(String, String),
 }
 
 type Tx = UnboundedSender<Message>;
@@ -83,6 +85,8 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
 
     let temp_client = client.clone();
     let all_uri = Uri::from_static("all");
+
+    tx_test.send(MessageAction::OpenConnection(temp_client.uri.to_string(), temp_client.socket_addr.to_string()));
 
     peer_map.lock().await.push(client);
 
@@ -180,6 +184,7 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
             },
             Message::Close(_close) => {
                 println!("Close");
+                tx_test.send(MessageAction::CloseConnection(temp_client.uri.to_string(), temp_client.socket_addr.to_string()));
             },
             Message::Frame(_frame) => {
                 println!("Frame");
@@ -233,7 +238,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 
     // Startup message
-    let payload = Payload::new("Test")
+    let payload = Payload::new("Alert-Net-Status")
         .title("Alert Net server")
         .message("Alert Net server gestartet")
         .priority(Priority::Default);
@@ -274,17 +279,38 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     let room = detection_message.device.area;
                     println!("RES: {:#?}", result);
 
-                    let payload = Payload::new(&room)
+                    let topic = format!("Alert-Net-{}", &room);
+                    println!("Topic: {}", &topic);
+
+                    let payload = Payload::new(topic)
                         .title(format!("Bereich {}", room))
                         .message(format!("Gerät: {}, Auslöser: {}", detection_message.device.description, detection_message.source))
                         .priority(Priority::Default);
 
-                    let bla = ntfy_dispatcher.send(&payload).await;
-                    println!("NTFY: {:#?}", bla);
+                    let ntfy_result = ntfy_dispatcher.send(&payload).await;
+                    println!("NTFY: {:#?}", ntfy_result);
                 }
                 MessageAction::Test(msg) => {
                     //println!("Test msg to message handler. MSG: {}", msg);
                 },
+                MessageAction::CloseConnection(uri, socket) => {
+                    let payload = Payload::new("Alert-Net-Status")
+                        .title("Verbindung geschlossen")
+                        .message(format!("Bereich: {}, Adresse: {}", uri, socket))
+                        .priority(Priority::High);
+
+                    let ntfy_result = ntfy_dispatcher.send(&payload).await;
+                    println!("NTFY: {:#?}", ntfy_result);
+                }
+                MessageAction::OpenConnection(uri, socket) => {
+                    let payload = Payload::new("Alert-Net-Status")
+                        .title("Verbindung gestartet")
+                        .message(format!("Bereich: {}, Adresse: {}", uri, socket))
+                        .priority(Priority::Default);
+
+                    let ntfy_result = ntfy_dispatcher.send(&payload).await;
+                    println!("NTFY: {:#?}", ntfy_result);
+                }
             }
         }
     });
